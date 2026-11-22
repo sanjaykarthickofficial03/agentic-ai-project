@@ -1,39 +1,34 @@
-# Agentic AI Framework for Autonomous Data Analysis and Insight Generation
+# Agentic Data Analyst - Stable Build
 
-## Architecture
-Dataset + user objective
--> Profile Agent
--> Planner Agent
--> EDA Agent
--> Model Agent
--> Validation Agent
--> Insight Agent
+This build provides a reliable multi-agent tabular-data workflow with optional local Ollama reasoning.
 
-## Autonomous task selection
-The Planner Agent now determines whether the uploaded tabular dataset should be analyzed as:
+## Workflow
+Profile -> Planner -> Preprocessing -> EDA -> Model -> Validation -> Insights
 
-- **Classification**: categorical/discrete target
-- **Regression**: continuous numeric target
-- **Clustering**: no target or an explicit grouping/segmentation objective
+## Fully preprocessed dataset
+The Preprocessing Agent now creates `processed_df`, a user-facing dataset with zero missing cells. Feature missing values are filled using median/mode. Rows with a missing target are dropped rather than inventing labels or values. This processed dataframe is downloadable from the Preprocessing Agent page.
 
-The UI also provides an optional target-column override when automatic target detection is ambiguous.
+For machine-learning evaluation, the Model Agent uses a separate `model_df`: target-missing rows are removed, while feature missing values remain and are imputed inside the model pipeline during each CV fold. This prevents leakage.
 
-## Model selection
-For supervised tasks, the Model Agent compares simple baselines and selects the best candidate using the appropriate metric:
+## Ollama
+The planner and insight stages use native Ollama endpoints when available. The app checks `/api/version` and `/api/tags`, verifies the requested model is installed, and falls back to deterministic reasoning when Ollama or the selected model is unavailable.
 
-- Classification: Logistic Regression vs Random Forest Classifier; Accuracy and weighted F1
-- Regression: Linear Regression vs Random Forest Regressor; MAE, RMSE and R2
-- Clustering: K-Means with candidate values of k; Silhouette Score
+Suggested setup:
 
-The system no longer treats every numeric target as classification. For example, a continuous `Age` target is treated as a regression problem.
-
-## Run
-pip install -r requirements.txt
-copy .env.example to .env
+```powershell
+ollama serve
+ollama pull qwen2.5:1.5b
+python diagnose_ollama.py
 streamlit run app.py
+```
 
-## Important limitation
-Automatic target detection is heuristic when the user does not explicitly provide a target. For a production-quality system, the planner should surface its confidence and ask the user to confirm an ambiguous target rather than silently making a questionable choice.
+`OLLAMA_MODEL=` can be left blank. Auto mode selects an installed small model when possible.
 
-## Why this is agentic
-The Planner Agent uses the dataset profile and user objective to select the analytical task and executable workflow. Specialized agents then perform profiling, EDA, modeling/clustering, validation, and insight synthesis.
+## Large datasets
+Model search uses adaptive representative sampling for large datasets, removes identifier-like columns from modeling, skips poorly scaling algorithms where appropriate, and keeps cross-validation at a controlled resource level.
+## Latest reliability upgrades
+
+- Insight Agent sends a compact evidence packet instead of the full analytical state, uses a bounded local-LLM response budget, and falls back immediately to deterministic insights when inference is slow/unavailable.
+- Classification/regression model selection is tie-aware: if a real model ties the DummyClassifier/DummyRegressor on the primary metric and does not materially lose on the secondary metric, the real model is surfaced as the recommendation.
+- The model result exposes the baseline comparison and selection reason so the UI does not misleadingly report a dummy model as the winner.
+
